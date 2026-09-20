@@ -61,6 +61,15 @@ with st.sidebar:
     st.header("👤 Profil")
     profil_actif = st.selectbox("Choisir le profil :", ["Anaïs", "Manon"])
 
+    # Attribution automatique de la taille selon le profil choisi
+    tailles_profils = {
+        "Anaïs": 167,
+        "Manon": 160
+    }
+    taille_personne = tailles_profils[profil_actif]
+
+    st.caption(f"📏 Taille enregistrée pour {profil_actif} : **{taille_personne} cm**")
+
     st.divider()
 
     st.header(f"Nouvelle entrée ({profil_actif})")
@@ -70,11 +79,6 @@ with st.sidebar:
         st.markdown("**Conditions du relevé :**")
         a_jeun = st.checkbox("Prise de mesure à jeun 🥣", value=True)
         regles = st.checkbox("Période de règles 🩸", value=False)
-
-        st.divider()
-
-        st.markdown("**Taille de référence (pour le calcul IMC) :**")
-        taille_personne = st.number_input("Taille en cm (ex: 165)", min_value=100, max_value=230, value=165, step=1)
 
         st.divider()
         st.caption("💡 Laisse à 0.0 les mesures que tu n'as pas prises aujourd'hui (elles seront lissées automatiquement).")
@@ -91,7 +95,6 @@ with st.sidebar:
         bouton_valider = st.form_submit_button("Enregistrer")
 
     if bouton_valider:
-        # Convertit 0.0 en None (Null en BDD) pour éviter les zéros parasites
         def val_ou_none(valeur):
             return valeur if valeur > 0 else None
 
@@ -140,17 +143,16 @@ df_raw = pd.read_sql_query(
 st.subheader(f"📊 Tableau de bord — {profil_actif}")
 
 if not df_raw.empty:
-    # Nettoyage : Remplacement des 0 par NaN pour le traitement
     cols_mesures = ["poids", "poitrine", "taille", "bras", "poignet", "cuisse", "genou", "mollet"]
     df = df_raw.copy()
     df[cols_mesures] = df[cols_mesures].replace(0, np.nan)
 
-    # Lissage (Interpolation linéaire + propagation de la dernière valeur connue vers l'avant et l'arrière)
+    # Lissage
     df_interp = df.copy()
     df_interp[cols_mesures] = df_interp[cols_mesures].interpolate(method='linear', limit_direction='both').ffill().bfill()
 
     # --- CARTES DE MÉTRIQUES (KPIs + IMC) ---
-    st.markdown("##### 📌 Derniers résultats & Évolution (avec lissage)")
+    st.markdown("##### 📌 Derniers résultats & Évolution")
     col1, col2, col3, col4, col5 = st.columns(5)
 
     derniere = df_interp.iloc[-1]
@@ -166,8 +168,8 @@ if not df_raw.empty:
         delta_color="inverse"
     )
 
-    # Calcul IMC
-    if poids_val and taille_personne:
+    # Calcul IMC dynamique
+    if poids_val:
         taille_m = taille_personne / 100
         imc = round(poids_val / (taille_m ** 2), 1)
         
@@ -248,7 +250,6 @@ if not df_raw.empty:
             lambda x: "Oui 🩸" if x == 1 else "Non ⚪"
         )
 
-        # Affichage propre dans l'historique : affiche "—" si non mesuré au lieu de 0
         df_display[cols_mesures] = df_display[cols_mesures].replace(0, np.nan).fillna("—")
 
         df_display = df_display.sort_values(
