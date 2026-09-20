@@ -72,6 +72,11 @@ with st.sidebar:
 
         st.divider()
 
+        st.markdown("**Taille de référence (pour le calcul IMC) :**")
+        taille_personne = st.number_input("Taille en cm (ex: 165)", min_value=100, max_value=230, value=165, step=1)
+
+        st.divider()
+
         poids = st.number_input("Poids (kg)", min_value=0.0, step=0.1)
         poitrine = st.number_input("Tour de poitrine (cm)", min_value=0.0, step=0.5)
         taille = st.number_input("Tour de taille (cm)", min_value=0.0, step=0.5)
@@ -129,26 +134,55 @@ df = pd.read_sql_query(
 st.subheader(f"📊 Tableau de bord — {profil_actif}")
 
 if not df.empty:
-    # --- OPTION A : CARTES DE MÉTRIQUES (KPIs) ---
+    # --- CARTES DE MÉTRIQUES (KPIs + IMC) ---
     st.markdown("##### 📌 Derniers résultats & Évolution")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
-    # Récupération de la dernière mesure et de la précédente si elle existe
     derniere = df.iloc[-1]
     precedente = df.iloc[-2] if len(df) > 1 else None
 
     # Poids
     delta_poids = round(derniere["poids"] - precedente["poids"], 1) if precedente is not None and derniere["poids"] and precedente["poids"] else None
     col1.metric(
-        label="⚖️ Poids actuel",
+        label="⚖️ Poids",
         value=f"{derniere['poids']} kg" if derniere["poids"] else "—",
         delta=f"{delta_poids} kg" if delta_poids is not None else None,
-        delta_color="inverse"  # Vert quand ça baisse, Rouge quand ça monte
+        delta_color="inverse"
     )
+
+    # Calcul IMC
+    if derniere["poids"] and taille_personne:
+        taille_m = taille_personne / 100
+        imc = round(derniere["poids"] / (taille_m ** 2), 1)
+        
+        # Qualification OMS
+        if imc < 18.5:
+            cat_imc = "Insuffisance pondérale"
+        elif 18.5 <= imc < 25:
+            cat_imc = "Corpulence normale"
+        elif 25 <= imc < 30:
+            cat_imc = "Surpoids"
+        else:
+            cat_imc = "Obésité"
+
+        # Calcul delta IMC si précédente existe
+        delta_imc = None
+        if precedente is not None and precedente["poids"]:
+            imc_prec = round(precedente["poids"] / (taille_m ** 2), 1)
+            delta_imc = round(imc - imc_prec, 1)
+
+        col2.metric(
+            label="📊 IMC",
+            value=f"{imc}",
+            delta=f"{cat_imc} ({delta_imc:+})" if delta_imc is not None else cat_imc,
+            delta_color="inverse"
+        )
+    else:
+        col2.metric(label="📊 IMC", value="—")
 
     # Tour de taille
     delta_taille = round(derniere["taille"] - precedente["taille"], 1) if precedente is not None and derniere["taille"] and precedente["taille"] else None
-    col2.metric(
+    col3.metric(
         label="📏 Tour de taille",
         value=f"{derniere['taille']} cm" if derniere["taille"] else "—",
         delta=f"{delta_taille} cm" if delta_taille is not None else None,
@@ -157,7 +191,7 @@ if not df.empty:
 
     # Tour de cuisse
     delta_cuisse = round(derniere["cuisse"] - precedente["cuisse"], 1) if precedente is not None and derniere["cuisse"] and precedente["cuisse"] else None
-    col3.metric(
+    col4.metric(
         label="🦵 Tour de cuisse",
         value=f"{derniere['cuisse']} cm" if derniere["cuisse"] else "—",
         delta=f"{delta_cuisse} cm" if delta_cuisse is not None else None,
@@ -165,9 +199,9 @@ if not df.empty:
     )
 
     # Nombre total de relevés
-    col4.metric(
-        label="📅 Total de relevés",
-        value=f"{len(df)} entrée{'s' if len(df) > 1 else ''}"
+    col5.metric(
+        label="📅 Relevés",
+        value=f"{len(df)}"
     )
 
     st.divider()
