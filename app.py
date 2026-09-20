@@ -228,11 +228,24 @@ if not df_raw.empty:
     # --- TAB1 / TAB2 ---
     tab1, tab2 = st.tabs(["📈 Évolution (Graphiques)", "📊 Historique (Tableau)"])
 
-    # Fonction pour générer des graphiques fixes avec axe Y ajusté
+    # Dictionnaire de traduction des mois pour les tooltips
+    mois_fr = {
+        1: "janv.", 2: "févr.", 3: "mars", 4: "avr.", 5: "mai", 6: "juin",
+        7: "juil.", 8: "août", 9: "sept.", 10: "oct.", 11: "nov.", 12: "déc."
+    }
+
     def creer_graphique_fixe(df_data, colonnes, titre_y):
-        df_melted = df_data.melt(id_vars=["date"], value_vars=colonnes, var_name="Mesure", value_name="Valeur")
+        df_plot = df_data.copy()
+        df_plot["date_dt"] = pd.to_datetime(df_plot["date"])
+        df_plot["date_fr"] = df_plot["date_dt"].apply(lambda d: f"{d.day:02d} {mois_fr[d.month]} {d.year}")
+
+        df_melted = df_plot.melt(
+            id_vars=["date_dt", "date_fr"], 
+            value_vars=colonnes, 
+            var_name="Mesure", 
+            value_name="Valeur"
+        )
         
-        # Calcul des bornes Min et Max pour caler l'axe Y
         val_min = df_melted["Valeur"].min()
         val_max = df_melted["Valeur"].max()
         
@@ -243,10 +256,21 @@ if not df_raw.empty:
             domain_y = [max(0, round(val_min - marge, 1)), round(val_max + marge, 1)]
 
         chart = alt.Chart(df_melted).mark_line(point=True).encode(
-            x=alt.X("date:T", title="Date"),
+            x=alt.X(
+                "date_dt:T", 
+                title="Date", 
+                axis=alt.Axis(
+                    format="%d/%m/%Y",  # Format standard JJ/MM/AAAA sur l'axe X
+                    labelAngle=-45
+                )
+            ),
             y=alt.Y("Valeur:Q", scale=alt.Scale(domain=domain_y), title=titre_y),
             color=alt.Color("Mesure:N", title="Légende"),
-            tooltip=["date:T", "Mesure:N", "Valeur:Q"]
+            tooltip=[
+                alt.Tooltip("date_fr:N", title="Date"),
+                alt.Tooltip("Mesure:N", title="Mesure"),
+                alt.Tooltip("Valeur:Q", title="Valeur")
+            ]
         ).properties(
             height=350
         )
