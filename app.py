@@ -228,8 +228,8 @@ if not df_raw.empty:
     # --- TAB1 / TAB2 ---
     tab1, tab2 = st.tabs(["📈 Évolution (Graphiques)", "📊 Historique (Tableau)"])
 
-    # Fonction pour générer des graphiques avec axe Y ajusté
-    def creer_graphique_ajuste(df_data, colonnes, titre_y):
+    # Fonction pour générer des graphiques fixes avec axe Y ajusté
+    def creer_graphique_fixe(df_data, colonnes, titre_y):
         df_melted = df_data.melt(id_vars=["date"], value_vars=colonnes, var_name="Mesure", value_name="Valeur")
         
         # Calcul des bornes Min et Max pour caler l'axe Y
@@ -239,7 +239,7 @@ if not df_raw.empty:
         if pd.isna(val_min) or pd.isna(val_max):
             domain_y = [0, 100]
         else:
-            marge = max((val_max - val_min) * 0.15, 1.0)  # Marge d'aération
+            marge = max((val_max - val_min) * 0.15, 1.0)
             domain_y = [max(0, round(val_min - marge, 1)), round(val_max + marge, 1)]
 
         chart = alt.Chart(df_melted).mark_line(point=True).encode(
@@ -249,19 +249,19 @@ if not df_raw.empty:
             tooltip=["date:T", "Mesure:N", "Valeur:Q"]
         ).properties(
             height=350
-        ).interactive()
+        )
 
         return chart
 
     with tab1:
         st.subheader("⚖️ Poids (kg)")
-        st.altair_chart(creer_graphique_ajuste(df_interp, ["poids"], "Poids (kg)"), use_container_width=True)
+        st.altair_chart(creer_graphique_fixe(df_interp, ["poids"], "Poids (kg)"), use_container_width=True)
 
         st.subheader("📏 Tronc & Cuisses : Taille, Poitrine, Cuisse (cm)")
-        st.altair_chart(creer_graphique_ajuste(df_interp, ["taille", "poitrine", "cuisse"], "Mesure (cm)"), use_container_width=True)
+        st.altair_chart(creer_graphique_fixe(df_interp, ["taille", "poitrine", "cuisse"], "Mesure (cm)"), use_container_width=True)
 
         st.subheader("💪 Membres & Articulations : Bras, Poignet, Genou, Mollet (cm)")
-        st.altair_chart(creer_graphique_ajuste(df_interp, ["bras", "poignet", "genou", "mollet"], "Mesure (cm)"), use_container_width=True)
+        st.altair_chart(creer_graphique_fixe(df_interp, ["bras", "poignet", "genou", "mollet"], "Mesure (cm)"), use_container_width=True)
 
     with tab2:
         st.subheader("Historique des relevés")
