@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 import random
 import numpy as np
+import altair as alt
 
 # Configuration de la page
 st.set_page_config(
@@ -81,7 +82,7 @@ with st.sidebar:
         regles = st.checkbox("Période de règles 🩸", value=False)
 
         st.divider()
-        st.caption("💡 Laisse à 0.0 les mesures que tu n'as pas prises aujourd'hui (elles seront lissées automatiquement).")
+        st.caption("💡 Laisse à 0.0 les mesures non prises (elles seront lissées sur le graphique).")
 
         poids = st.number_input("Poids (kg)", min_value=0.0, step=0.1)
         poitrine = st.number_input("Tour de poitrine (cm)", min_value=0.0, step=0.5)
@@ -147,7 +148,7 @@ if not df_raw.empty:
     df = df_raw.copy()
     df[cols_mesures] = df[cols_mesures].replace(0, np.nan)
 
-    # Lissage
+    # Lissage des données
     df_interp = df.copy()
     df_interp[cols_mesures] = df_interp[cols_mesures].interpolate(method='linear', limit_direction='both').ffill().bfill()
 
@@ -168,7 +169,7 @@ if not df_raw.empty:
         delta_color="inverse"
     )
 
-    # Calcul IMC dynamique
+    # Calcul IMC
     if poids_val:
         taille_m = taille_personne / 100
         imc = round(poids_val / (taille_m ** 2), 1)
@@ -227,17 +228,40 @@ if not df_raw.empty:
     # --- TAB1 / TAB2 ---
     tab1, tab2 = st.tabs(["📈 Évolution (Graphiques)", "📊 Historique (Tableau)"])
 
+    # Fonction pour générer des graphiques avec axe Y ajusté
+    def creer_graphique_ajuste(df_data, colonnes, titre_y):
+        df_melted = df_data.melt(id_vars=["date"], value_vars=colonnes, var_name="Mesure", value_name="Valeur")
+        
+        # Calcul des bornes Min et Max pour caler l'axe Y
+        val_min = df_melted["Valeur"].min()
+        val_max = df_melted["Valeur"].max()
+        
+        if pd.isna(val_min) or pd.isna(val_max):
+            domain_y = [0, 100]
+        else:
+            marge = max((val_max - val_min) * 0.15, 1.0)  # Marge d'aération
+            domain_y = [max(0, round(val_min - marge, 1)), round(val_max + marge, 1)]
+
+        chart = alt.Chart(df_melted).mark_line(point=True).encode(
+            x=alt.X("date:T", title="Date"),
+            y=alt.Y("Valeur:Q", scale=alt.Scale(domain=domain_y), title=titre_y),
+            color=alt.Color("Mesure:N", title="Légende"),
+            tooltip=["date:T", "Mesure:N", "Valeur:Q"]
+        ).properties(
+            height=350
+        ).interactive()
+
+        return chart
+
     with tab1:
         st.subheader("Poids (kg)")
-        st.line_chart(df_interp.set_index("date")[["poids"]])
+        st.altair_chart(creer_graphique_ajuste(df_interp, ["poids"], "Poids (kg)"), use_container_width=True)
 
         st.subheader("Haut du corps (cm)")
-        st.line_chart(
-            df_interp.set_index("date")[["poitrine", "taille", "bras", "poignet"]]
-        )
+        st.altair_chart(creer_graphique_ajuste(df_interp, ["poitrine", "taille", "bras", "poignet"], "Mesure (cm)"), use_container_width=True)
 
         st.subheader("Bas du corps (cm)")
-        st.line_chart(df_interp.set_index("date")[["cuisse", "genou", "mollet"]])
+        st.altair_chart(creer_graphique_ajuste(df_interp, ["cuisse", "genou", "mollet"], "Mesure (cm)"), use_container_width=True)
 
     with tab2:
         st.subheader("Historique des relevés")
