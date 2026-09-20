@@ -12,7 +12,7 @@ st.set_page_config(
 conn = sqlite3.connect("mensurations.db")
 c = conn.cursor()
 
-# Création de la table avec 'a_jeun' et 'regles' (INTEGER: 1 pour Vrai, 0 pour Faux)
+# Création de la table avec 'a_jeun' et 'regles'
 c.execute("""
     CREATE TABLE IF NOT EXISTS mesures (
         profil TEXT,
@@ -32,7 +32,7 @@ c.execute("""
 """)
 conn.commit()
 
-# Migration au cas où les nouvelles colonnes n'existent pas encore
+# Migration automatique si besoin
 for col, def_val in [("a_jeun", 1), ("regles", 0)]:
     try:
         c.execute(
@@ -40,12 +40,12 @@ for col, def_val in [("a_jeun", 1), ("regles", 0)]:
         )
         conn.commit()
     except sqlite3.OperationalError:
-        pass  # La colonne existe déjà
+        pass
 
 # Titre principal
 st.title("📏 Suivi des mensurations")
 
-# --- CITATION DE MOTIVATION ---
+# Citation de motivation
 citations = [
     "« Le succès, c'est la somme de petits efforts répétés jour après jour. »",
     "« La discipline est le pont entre vos objectifs et vos réalisations. »",
@@ -54,7 +54,6 @@ citations = [
     "« La régularité est la clé de la réussite. »"
 ]
 st.info(random.choice(citations))
-# ------------------------------
 
 # 2. Sélecteur de profil et Formulaire dans la barre latérale
 with st.sidebar:
@@ -74,9 +73,7 @@ with st.sidebar:
         st.divider()
 
         poids = st.number_input("Poids (kg)", min_value=0.0, step=0.1)
-        poitrine = st.number_input(
-            "Tour de poitrine (cm)", min_value=0.0, step=0.5
-        )
+        poitrine = st.number_input("Tour de poitrine (cm)", min_value=0.0, step=0.5)
         taille = st.number_input("Tour de taille (cm)", min_value=0.0, step=0.5)
         bras = st.number_input("Tour de bras (cm)", min_value=0.0, step=0.5)
         poignet = st.number_input("Tour de poignet (cm)", min_value=0.0, step=0.5)
@@ -132,6 +129,50 @@ df = pd.read_sql_query(
 st.subheader(f"📊 Tableau de bord — {profil_actif}")
 
 if not df.empty:
+    # --- OPTION A : CARTES DE MÉTRIQUES (KPIs) ---
+    st.markdown("##### 📌 Derniers résultats & Évolution")
+    col1, col2, col3, col4 = st.columns(4)
+
+    # Récupération de la dernière mesure et de la précédente si elle existe
+    derniere = df.iloc[-1]
+    precedente = df.iloc[-2] if len(df) > 1 else None
+
+    # Poids
+    delta_poids = round(derniere["poids"] - precedente["poids"], 1) if precedente is not None and derniere["poids"] and precedente["poids"] else None
+    col1.metric(
+        label="⚖️ Poids actuel",
+        value=f"{derniere['poids']} kg" if derniere["poids"] else "—",
+        delta=f"{delta_poids} kg" if delta_poids is not None else None,
+        delta_color="inverse"  # Vert quand ça baisse, Rouge quand ça monte
+    )
+
+    # Tour de taille
+    delta_taille = round(derniere["taille"] - precedente["taille"], 1) if precedente is not None and derniere["taille"] and precedente["taille"] else None
+    col2.metric(
+        label="📏 Tour de taille",
+        value=f"{derniere['taille']} cm" if derniere["taille"] else "—",
+        delta=f"{delta_taille} cm" if delta_taille is not None else None,
+        delta_color="inverse"
+    )
+
+    # Tour de cuisse
+    delta_cuisse = round(derniere["cuisse"] - precedente["cuisse"], 1) if precedente is not None and derniere["cuisse"] and precedente["cuisse"] else None
+    col3.metric(
+        label="🦵 Tour de cuisse",
+        value=f"{derniere['cuisse']} cm" if derniere["cuisse"] else "—",
+        delta=f"{delta_cuisse} cm" if delta_cuisse is not None else None,
+        delta_color="inverse"
+    )
+
+    # Nombre total de relevés
+    col4.metric(
+        label="📅 Total de relevés",
+        value=f"{len(df)} entrée{'s' if len(df) > 1 else ''}"
+    )
+
+    st.divider()
+
+    # --- TAB1 / TAB2 ---
     tab1, tab2 = st.tabs(["📈 Évolution (Graphiques)", "📊 Historique (Tableau)"])
 
     with tab1:
@@ -149,7 +190,6 @@ if not df.empty:
     with tab2:
         st.subheader("Historique des relevés")
 
-        # Conversion des champs binaires (1/0) en icônes claires
         df_display = df.copy()
         df_display["a_jeun"] = df_display["a_jeun"].apply(
             lambda x: "Oui ✅" if x == 1 else "Non ❌"
