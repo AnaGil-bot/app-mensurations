@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
+import random
 
 # Configuration de la page
 st.set_page_config(
@@ -41,7 +42,19 @@ for col, def_val in [("a_jeun", 1), ("regles", 0)]:
     except sqlite3.OperationalError:
         pass  # La colonne existe déjà
 
+# Titre principal
 st.title("📏 Suivi des mensurations")
+
+# --- CITATION DE MOTIVATION ---
+citations = [
+    "« Le succès, c'est la somme de petits efforts répétés jour après jour. »",
+    "« La discipline est le pont entre vos objectifs et vos réalisations. »",
+    "« La seule mauvaise séance est celle que tu ne fais pas. »",
+    "« Chaque petit progrès compte. »",
+    "« La régularité est la clé de la réussite. »"
+]
+st.info(random.choice(citations))
+# ------------------------------
 
 # 2. Sélecteur de profil et Formulaire dans la barre latérale
 with st.sidebar:
