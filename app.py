@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 import random
+import numpy as np
 
 # Configuration de la page
 st.set_page_config(
@@ -76,6 +77,7 @@ with st.sidebar:
         taille_personne = st.number_input("Taille en cm (ex: 165)", min_value=100, max_value=230, value=165, step=1)
 
         st.divider()
+        st.caption("💡 Laisse à 0.0 les mesures que tu n'as pas prises aujourd'hui (elles seront lissées automatiquement).")
 
         poids = st.number_input("Poids (kg)", min_value=0.0, step=0.1)
         poitrine = st.number_input("Tour de poitrine (cm)", min_value=0.0, step=0.5)
@@ -89,6 +91,10 @@ with st.sidebar:
         bouton_valider = st.form_submit_button("Enregistrer")
 
     if bouton_valider:
+        # Convertit 0.0 en None (Null en BDD) pour éviter les zéros parasites
+        def val_ou_none(valeur):
+            return valeur if valeur > 0 else None
+
         c.execute(
             """
             INSERT INTO mesures (profil, date, a_jeun, regles, poids, poitrine, taille, bras, poignet, cuisse, genou, mollet)
@@ -110,14 +116,14 @@ with st.sidebar:
                 str(date_saisie),
                 1 if a_jeun else 0,
                 1 if regles else 0,
-                poids,
-                poitrine,
-                taille,
-                bras,
-                poignet,
-                cuisse,
-                genou,
-                mollet,
+                val_ou_none(poids),
+                val_ou_none(poitrine),
+                val_ou_none(taille),
+                val_ou_none(bras),
+                val_ou_none(poignet),
+                val_ou_none(cuisse),
+                val_ou_none(genou),
+                val_ou_none(mollet),
             ),
         )
         conn.commit()
@@ -125,7 +131,7 @@ with st.sidebar:
         st.rerun()
 
 # 3. Récupération des données filtrées par profil
-df = pd.read_sql_query(
+df_raw = pd.read_sql_query(
     "SELECT date, a_jeun, regles, poids, poitrine, taille, bras, poignet, cuisse, genou, mollet FROM mesures WHERE profil = ? ORDER BY date ASC",
     conn,
     params=(profil_actif,),
@@ -133,31 +139,40 @@ df = pd.read_sql_query(
 
 st.subheader(f"📊 Tableau de bord — {profil_actif}")
 
-if not df.empty:
+if not df_raw.empty:
+    # Nettoyage : Remplacement des 0 par NaN pour le traitement
+    cols_mesures = ["poids", "poitrine", "taille", "bras", "poignet", "cuisse", "genou", "mollet"]
+    df = df_raw.copy()
+    df[cols_mesures] = df[cols_mesures].replace(0, np.nan)
+
+    # Lissage (Interpolation linéaire + propagation de la dernière valeur connue vers l'avant et l'arrière)
+    df_interp = df.copy()
+    df_interp[cols_mesures] = df_interp[cols_mesures].interpolate(method='linear', limit_direction='both').ffill().bfill()
+
     # --- CARTES DE MÉTRIQUES (KPIs + IMC) ---
-    st.markdown("##### 📌 Derniers résultats & Évolution")
+    st.markdown("##### 📌 Derniers résultats & Évolution (avec lissage)")
     col1, col2, col3, col4, col5 = st.columns(5)
 
-    derniere = df.iloc[-1]
-    precedente = df.iloc[-2] if len(df) > 1 else None
+    derniere = df_interp.iloc[-1]
+    precedente = df_interp.iloc[-2] if len(df_interp) > 1 else None
 
     # Poids
-    delta_poids = round(derniere["poids"] - precedente["poids"], 1) if precedente is not None and derniere["poids"] and precedente["poids"] else None
+    poids_val = round(derniere["poids"], 1) if pd.notna(derniere["poids"]) else None
+    delta_poids = round(derniere["poids"] - precedente["poids"], 1) if precedente is not None and pd.notna(derniere["poids"]) and pd.notna(precedente["poids"]) else None
     col1.metric(
         label="⚖️ Poids",
-        value=f"{derniere['poids']} kg" if derniere["poids"] else "—",
+        value=f"{poids_val} kg" if poids_val else "—",
         delta=f"{delta_poids} kg" if delta_poids is not None else None,
         delta_color="inverse"
     )
 
     # Calcul IMC
-    if derniere["poids"] and taille_personne:
+    if poids_val and taille_personne:
         taille_m = taille_personne / 100
-        imc = round(derniere["poids"] / (taille_m ** 2), 1)
+        imc = round(poids_val / (taille_m ** 2), 1)
         
-        # Qualification OMS
         if imc < 18.5:
-            cat_imc = "Insuffisance pondérale"
+            cat_imc = "Insuffisance pondérale"
         elif 18.5 <= imc < 25:
             cat_imc = "Corpulence normale"
         elif 25 <= imc < 30:
@@ -165,9 +180,8 @@ if not df.empty:
         else:
             cat_imc = "Obésité"
 
-        # Calcul delta IMC si précédente existe
         delta_imc = None
-        if precedente is not None and precedente["poids"]:
+        if precedente is not None and pd.notna(precedente["poids"]):
             imc_prec = round(precedente["poids"] / (taille_m ** 2), 1)
             delta_imc = round(imc - imc_prec, 1)
 
@@ -181,19 +195,21 @@ if not df.empty:
         col2.metric(label="📊 IMC", value="—")
 
     # Tour de taille
-    delta_taille = round(derniere["taille"] - precedente["taille"], 1) if precedente is not None and derniere["taille"] and precedente["taille"] else None
+    taille_val = round(derniere["taille"], 1) if pd.notna(derniere["taille"]) else None
+    delta_taille = round(derniere["taille"] - precedente["taille"], 1) if precedente is not None and pd.notna(derniere["taille"]) and pd.notna(precedente["taille"]) else None
     col3.metric(
         label="📏 Tour de taille",
-        value=f"{derniere['taille']} cm" if derniere["taille"] else "—",
+        value=f"{taille_val} cm" if taille_val else "—",
         delta=f"{delta_taille} cm" if delta_taille is not None else None,
         delta_color="inverse"
     )
 
     # Tour de cuisse
-    delta_cuisse = round(derniere["cuisse"] - precedente["cuisse"], 1) if precedente is not None and derniere["cuisse"] and precedente["cuisse"] else None
+    cuisse_val = round(derniere["cuisse"], 1) if pd.notna(derniere["cuisse"]) else None
+    delta_cuisse = round(derniere["cuisse"] - precedente["cuisse"], 1) if precedente is not None and pd.notna(derniere["cuisse"]) and pd.notna(precedente["cuisse"]) else None
     col4.metric(
         label="🦵 Tour de cuisse",
-        value=f"{derniere['cuisse']} cm" if derniere["cuisse"] else "—",
+        value=f"{cuisse_val} cm" if cuisse_val else "—",
         delta=f"{delta_cuisse} cm" if delta_cuisse is not None else None,
         delta_color="inverse"
     )
@@ -201,7 +217,7 @@ if not df.empty:
     # Nombre total de relevés
     col5.metric(
         label="📅 Relevés",
-        value=f"{len(df)}"
+        value=f"{len(df_raw)}"
     )
 
     st.divider()
@@ -211,26 +227,29 @@ if not df.empty:
 
     with tab1:
         st.subheader("Poids (kg)")
-        st.line_chart(df.set_index("date")[["poids"]])
+        st.line_chart(df_interp.set_index("date")[["poids"]])
 
         st.subheader("Haut du corps (cm)")
         st.line_chart(
-            df.set_index("date")[["poitrine", "taille", "bras", "poignet"]]
+            df_interp.set_index("date")[["poitrine", "taille", "bras", "poignet"]]
         )
 
         st.subheader("Bas du corps (cm)")
-        st.line_chart(df.set_index("date")[["cuisse", "genou", "mollet"]])
+        st.line_chart(df_interp.set_index("date")[["cuisse", "genou", "mollet"]])
 
     with tab2:
         st.subheader("Historique des relevés")
 
-        df_display = df.copy()
+        df_display = df_raw.copy()
         df_display["a_jeun"] = df_display["a_jeun"].apply(
             lambda x: "Oui ✅" if x == 1 else "Non ❌"
         )
         df_display["regles"] = df_display["regles"].apply(
             lambda x: "Oui 🩸" if x == 1 else "Non ⚪"
         )
+
+        # Affichage propre dans l'historique : affiche "—" si non mesuré au lieu de 0
+        df_display[cols_mesures] = df_display[cols_mesures].replace(0, np.nan).fillna("—")
 
         df_display = df_display.sort_values(
             by="date", ascending=False
