@@ -254,14 +254,14 @@ if not df_raw.empty:
         return chart
 
     with tab1:
-        st.subheader("Poids (kg)")
+        st.subheader("⚖️ Poids (kg)")
         st.altair_chart(creer_graphique_ajuste(df_interp, ["poids"], "Poids (kg)"), use_container_width=True)
 
-        st.subheader("Haut du corps (cm)")
-        st.altair_chart(creer_graphique_ajuste(df_interp, ["poitrine", "taille", "bras", "poignet"], "Mesure (cm)"), use_container_width=True)
+        st.subheader("📏 Tronc & Cuisses : Taille, Poitrine, Cuisse (cm)")
+        st.altair_chart(creer_graphique_ajuste(df_interp, ["taille", "poitrine", "cuisse"], "Mesure (cm)"), use_container_width=True)
 
-        st.subheader("Bas du corps (cm)")
-        st.altair_chart(creer_graphique_ajuste(df_interp, ["cuisse", "genou", "mollet"], "Mesure (cm)"), use_container_width=True)
+        st.subheader("💪 Membres & Articulations : Bras, Poignet, Genou, Mollet (cm)")
+        st.altair_chart(creer_graphique_ajuste(df_interp, ["bras", "poignet", "genou", "mollet"], "Mesure (cm)"), use_container_width=True)
 
     with tab2:
         st.subheader("Historique des relevés")
